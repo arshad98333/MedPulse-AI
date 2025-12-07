@@ -1,9 +1,10 @@
 
 import React, { useState, useEffect } from 'react';
 import { useLocation, useNavigate } from 'react-router-dom';
-import { ArrowLeft, Sparkles, Plus, Trash2, CheckCircle, Printer, Loader2, Search, FileText, Database, Key, Utensils, AlertTriangle, Ban, Check, Eye } from 'lucide-react';
+import { ArrowLeft, Sparkles, Plus, Trash2, CheckCircle, Printer, Loader2, Search, FileText, Database, Key, Utensils, AlertTriangle, Ban, Check, Eye, Shield, ShieldAlert, Activity } from 'lucide-react';
 import { Patient, Vitals, Medicine, RagResult, DietCategory, DietStatus } from '../types';
 import { analyzeSymptoms, generateDetailedDietPlan } from '../services/geminiService';
+import { calculateTriageLevel, checkHipaaCompliance } from '../services/triageService';
 import { searchMedicalRecords } from '../services/ragService';
 import { collection, addDoc, updateDoc, doc } from 'firebase/firestore';
 import { db } from '../services/firebase';
@@ -31,6 +32,11 @@ const Consultation = () => {
     temperature: '', pulse: '', spo2: '', bpSystolic: '', bpDiastolic: '', weight: '', height: '', sugar: ''
   });
   
+  // Realtime Logic State
+  const [triage, setTriage] = useState<{ level: string, confidence: number } | null>(null);
+  const [hipaa, setHipaa] = useState<{ safe: boolean, types: string[] }>({ safe: true, types: [] });
+  const [isTyping, setIsTyping] = useState(false);
+  
   // RAG State
   const [ragResults, setRagResults] = useState<RagResult[]>([]);
   const [ragError, setRagError] = useState('');
@@ -49,6 +55,26 @@ const Consultation = () => {
   // Lifestyle / Diet
   const [dietPlan, setDietPlan] = useState<DietCategory[]>([]);
   const [exercise, setExercise] = useState('30 mins moderate activity daily.');
+
+  // Effect: Realtime Triage & HIPAA Check (Debounced)
+  useEffect(() => {
+    const timer = setTimeout(async () => {
+      if (symptoms.length > 5) {
+        setIsTyping(true);
+        // 1. Triage
+        const triageResult = await calculateTriageLevel(symptoms);
+        setTriage(triageResult);
+        
+        // 2. HIPAA
+        const hipaaResult = await checkHipaaCompliance(symptoms);
+        setHipaa({ safe: !hipaaResult.containsPII, types: hipaaResult.identifiedTypes });
+        
+        setIsTyping(false);
+      }
+    }, 1000); // 1 sec debounce
+
+    return () => clearTimeout(timer);
+  }, [symptoms]);
 
   const handleRagSearch = async () => {
     if (!symptoms) return;
@@ -173,14 +199,44 @@ const Consultation = () => {
         </h3>
         
         <div className="space-y-6">
-          <div>
-            <label className="block text-sm font-medium text-slate-700 mb-2">Symptoms</label>
+          <div className="relative">
+            <div className="flex justify-between items-center mb-2">
+               <label className="block text-sm font-medium text-slate-700">Symptoms</label>
+               {/* Indicators */}
+               <div className="flex gap-2">
+                  {triage && (
+                     <div className={`flex items-center gap-1 px-2 py-0.5 rounded text-[10px] font-bold border transition-all ${
+                        triage.level === 'CRITICAL' ? 'bg-red-100 text-red-700 border-red-200' :
+                        triage.level === 'URGENT' ? 'bg-orange-100 text-orange-700 border-orange-200' :
+                        'bg-green-100 text-green-700 border-green-200'
+                     }`}>
+                        <Activity size={10} /> {triage.level}
+                     </div>
+                  )}
+                  {symptoms.length > 0 && (
+                      <div className={`flex items-center gap-1 px-2 py-0.5 rounded text-[10px] font-bold border transition-all ${
+                        hipaa.safe ? 'bg-blue-50 text-blue-600 border-blue-100' : 'bg-red-50 text-red-600 border-red-100'
+                      }`}>
+                         {hipaa.safe ? <Shield size={10} /> : <ShieldAlert size={10} />}
+                         {hipaa.safe ? 'HIPAA Safe' : 'PII Detected'}
+                      </div>
+                  )}
+               </div>
+            </div>
             <textarea 
-              className="w-full px-4 py-3 rounded-lg border border-slate-200 bg-slate-50 focus:bg-white focus:ring-2 focus:ring-blue-500 outline-none h-32 resize-none"
+              className={`w-full px-4 py-3 rounded-lg border transition-all outline-none h-32 resize-none ${
+                  !hipaa.safe ? 'border-red-300 bg-red-50 focus:border-red-500' : 'border-slate-200 bg-slate-50 focus:bg-white focus:border-blue-500'
+              }`}
               placeholder="Enter detailed symptoms..."
               value={symptoms}
               onChange={(e) => setSymptoms(e.target.value)}
             />
+            {isTyping && <div className="absolute bottom-2 right-2 text-xs text-slate-400 flex items-center gap-1"><Loader2 size={10} className="animate-spin" /> Analyzing...</div>}
+            {!hipaa.safe && (
+                <div className="mt-1 text-xs text-red-500 font-medium">
+                   Warning: Potential PII detected ({hipaa.types.join(', ')}). Please remove patient names/phones.
+                </div>
+            )}
           </div>
 
           <div className="grid grid-cols-3 gap-4">

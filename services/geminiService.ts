@@ -25,6 +25,45 @@ export const testGeminiConnection = async () => {
     }
 };
 
+export const getEmbedding = async (text: string): Promise<number[]> => {
+  try {
+    const response = await ai.models.embedContent({
+      model: "text-embedding-004",
+      contents: { parts: [{ text }] }
+    });
+    return response.embeddings?.[0]?.values || [];
+  } catch (e) {
+    logger.error("GeminiAI-Embedding", "Failed to get embedding", e);
+    return [];
+  }
+};
+
+export const detectPII = async (text: string): Promise<{ containsPII: boolean, redactedText: string, identifiedTypes: string[] }> => {
+  const serviceName = "GeminiAI-HIPAA";
+  try {
+    const prompt = `
+      Analyze the following text for Personally Identifiable Information (PII) according to HIPAA guidelines.
+      Text: "${text}"
+      
+      Identify if it contains specific names, phone numbers, SSNs, or addresses.
+      Return JSON: { "containsPII": boolean, "redactedText": string (replace PII with [REDACTED]), "identifiedTypes": string[] }
+    `;
+    
+    const response = await ai.models.generateContent({
+      model: "gemini-2.5-flash",
+      contents: prompt,
+      config: {
+        responseMimeType: "application/json"
+      }
+    });
+
+    return JSON.parse(response.text || '{"containsPII": false, "redactedText": "", "identifiedTypes": []}');
+  } catch (e) {
+    logger.error(serviceName, "PII Detection Failed", e);
+    return { containsPII: false, redactedText: text, identifiedTypes: [] };
+  }
+};
+
 export const analyzeSymptoms = async (symptoms: string, vitals: Vitals, ragContext: string = '') => {
   const serviceName = "GeminiAI-Analysis";
   logger.info(serviceName, "Starting symptom analysis", { symptoms, vitals });
