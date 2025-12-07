@@ -1,3 +1,4 @@
+
 import React from 'react';
 import { 
   LayoutDashboard, 
@@ -6,7 +7,8 @@ import {
   Settings, 
   LogOut,
   FileText,
-  Activity
+  Activity,
+  BarChart3 // Added Icon
 } from 'lucide-react';
 import { Link, useLocation } from 'react-router-dom';
 
@@ -20,6 +22,7 @@ const Sidebar = () => {
     { icon: Users, label: "Patients", path: "/search" },
     { icon: Stethoscope, label: "Consultation", path: "/consultation" },
     { icon: FileText, label: "Reports", path: "/reports" },
+    { icon: BarChart3, label: "Clinical Evals", path: "/evals" }, // Added Menu Item
   ];
 
   return (

@@ -8,6 +8,7 @@ import Consultation from './pages/Consultation';
 import Reports from './pages/Reports';
 import ReportView from './pages/ReportView';
 import Settings from './pages/Settings';
+import Evaluation from './pages/Evaluation'; // Import
 
 function App() {
   return (
@@ -21,6 +22,7 @@ function App() {
             <Route path="/consultation" element={<Consultation />} />
             <Route path="/reports" element={<Reports />} />
             <Route path="/reports/:id" element={<ReportView />} />
+            <Route path="/evals" element={<Evaluation />} /> {/* Added Route */}
             <Route path="/settings" element={<Settings />} />
             {/* Fallback routes */}
             <Route path="*" element={<Dashboard />} />
