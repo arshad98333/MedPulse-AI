@@ -1,16 +1,17 @@
 
 import React, { useState, useEffect, useRef } from 'react';
-import { Settings as SettingsIcon, Database, Sparkles, AlertTriangle, Trash2, Key, Terminal, Upload, FileText, CheckCircle, Save } from 'lucide-react';
+import { Settings as SettingsIcon, Database, Sparkles, AlertTriangle, Trash2, Key, Terminal, Upload, FileText, CheckCircle, Save, RefreshCw, Loader2 } from 'lucide-react';
 import { logger, LogEntry } from '../services/logger';
 import { searchMedicalRecords } from '../services/ragService';
 import { testGeminiConnection } from '../services/geminiService';
 import { authService } from '../services/authService';
-import { listKnowledgeBaseFiles, uploadKnowledgeBaseFile, GcsFile } from '../services/knowledgeBaseService';
+import { listKnowledgeBaseFiles, uploadKnowledgeBaseFile, triggerKnowledgeBaseSync, GcsFile } from '../services/knowledgeBaseService';
 
 const Settings = () => {
   const [activeTab, setActiveTab] = useState<'config' | 'kb' | 'logs'>('config');
   const [logs, setLogs] = useState<LogEntry[]>([]);
   const logsEndRef = useRef<HTMLDivElement>(null);
+  const lastFetchedTab = useRef<string>('');
 
   // Auth State
   const [saJson, setSaJson] = useState('');
@@ -20,6 +21,7 @@ const Settings = () => {
   const [files, setFiles] = useState<GcsFile[]>([]);
   const [loadingFiles, setLoadingFiles] = useState(false);
   const [uploading, setUploading] = useState(false);
+  const [syncing, setSyncing] = useState(false);
 
   // Test States
   const [ragStatus, setRagStatus] = useState<'idle' | 'loading' | 'success' | 'error'>('idle');
@@ -40,10 +42,15 @@ const Settings = () => {
     }
   }, [logs, activeTab]);
 
-  // Effect 2: Fetch files (Depends on activeTab/creds, NOT logs)
+  // Effect 2: Fetch files (Ref based to prevent loops)
   useEffect(() => {
-    if (activeTab === 'kb' && hasCreds) {
+    if (activeTab === 'kb' && hasCreds && lastFetchedTab.current !== 'kb') {
       fetchFiles();
+      lastFetchedTab.current = 'kb';
+    }
+    // Reset ref when leaving tab
+    if (activeTab !== 'kb') {
+        lastFetchedTab.current = '';
     }
   }, [activeTab, hasCreds]);
 
@@ -52,6 +59,8 @@ const Settings = () => {
       setHasCreds(true);
       setSaJson(''); // Clear input for security
       alert("Service Account Configuration Saved!");
+      // Force refresh of file list if we just added creds on KB tab
+      if (activeTab === 'kb') fetchFiles();
     } else {
       alert("Invalid JSON. Please check the content.");
     }
@@ -81,6 +90,18 @@ const Settings = () => {
         setUploading(false);
       }
     }
+  };
+
+  const handleForceSync = async () => {
+      setSyncing(true);
+      try {
+          const msg = await triggerKnowledgeBaseSync();
+          alert(msg);
+      } catch (e) {
+          alert("Failed to trigger sync. See logs.");
+      } finally {
+          setSyncing(false);
+      }
   };
 
   const runRagTest = async () => {
@@ -165,6 +186,10 @@ const Settings = () => {
                    </button>
                 </div>
              </div>
+             
+             <div className="mt-4 p-4 bg-slate-50 rounded-lg text-xs text-slate-500">
+                <strong>Security Note:</strong> Storing the private key in the browser is a trade-off for this Serverless MVP architecture. In a production environment, this should be handled by a secure backend service.
+             </div>
           </div>
 
           {/* Diagnostics Section */}
@@ -207,7 +232,13 @@ const Settings = () => {
            <div className="bg-white p-6 rounded-xl border border-slate-200 shadow-sm col-span-2">
               <div className="flex justify-between items-center mb-4">
                 <h3 className="font-bold text-slate-900 flex items-center gap-2"><Database size={18} /> RAG Knowledge Base</h3>
-                <button onClick={fetchFiles} className="text-xs text-blue-600 hover:underline">Refresh</button>
+                <div className="flex gap-2">
+                    <button onClick={handleForceSync} disabled={syncing} className="flex items-center gap-1 px-3 py-1.5 bg-purple-50 text-purple-700 text-xs font-medium rounded hover:bg-purple-100 transition-colors disabled:opacity-50">
+                         {syncing ? <Loader2 size={12} className="animate-spin"/> : <RefreshCw size={12} />}
+                         Force Index Update
+                    </button>
+                    <button onClick={fetchFiles} className="text-xs text-blue-600 hover:underline px-2">Refresh List</button>
+                </div>
               </div>
               
               {loadingFiles ? (
@@ -251,6 +282,10 @@ const Settings = () => {
                  <Upload className="mx-auto text-blue-400 mb-2" size={32} />
                  <span className="text-sm font-medium text-blue-600">{uploading ? 'Uploading...' : 'Click to Upload PDF'}</span>
               </label>
+
+              <div className="mt-4 p-3 bg-blue-50 text-blue-700 text-xs rounded">
+                  Uploads are processed automatically. Click "Force Index Update" above if results are missing.
+              </div>
            </div>
         </div>
       )}
