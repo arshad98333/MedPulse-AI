@@ -1,0 +1,5 @@
+{
+  "name": "MedPulse AI",
+  "description": "A comprehensive AI-powered patient consultation workflow application for healthcare professionals, featuring vitals tracking, AI diagnosis assistance, and automated prescription generation.",
+  "requestFramePermissions": []
+}
