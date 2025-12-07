@@ -1,7 +1,7 @@
 
 import React, { useState, useEffect } from 'react';
 import { useLocation, useNavigate } from 'react-router-dom';
-import { ArrowLeft, Sparkles, Plus, Trash2, CheckCircle, Printer, Loader2, Search, FileText, Database, Key, Utensils, AlertTriangle, Ban, Check, EyeOff, Eye } from 'lucide-react';
+import { ArrowLeft, Sparkles, Plus, Trash2, CheckCircle, Printer, Loader2, Search, FileText, Database, Key, Utensils, AlertTriangle, Ban, Check, Eye } from 'lucide-react';
 import { Patient, Vitals, Medicine, RagResult, DietCategory, DietStatus } from '../types';
 import { analyzeSymptoms, generateDetailedDietPlan } from '../services/geminiService';
 import { searchMedicalRecords } from '../services/ragService';
@@ -34,8 +34,6 @@ const Consultation = () => {
   // RAG State
   const [ragResults, setRagResults] = useState<RagResult[]>([]);
   const [ragError, setRagError] = useState('');
-  const [gcpToken, setGcpToken] = useState(localStorage.getItem('gcloud_access_token') || '');
-  const [showTokenInput, setShowTokenInput] = useState(false);
 
   // AI Analysis State
   const [analysis, setAnalysis] = useState<{diagnosisSuggestions: string[], rationale: string, suggestedTreatmentNote?: string} | null>(null);
@@ -57,21 +55,16 @@ const Consultation = () => {
     logger.info("ConsultationUI", "User triggered RAG search");
     setSearchingRag(true);
     setRagError('');
-    
-    if (gcpToken) {
-        localStorage.setItem('gcloud_access_token', gcpToken);
-    }
 
     try {
-      const results = await searchMedicalRecords(symptoms, gcpToken);
+      const results = await searchMedicalRecords(symptoms);
       setRagResults(results || []);
       if (!results || results.length === 0) {
         setRagError('No relevant records found.');
       }
     } catch (e: any) {
-      setRagError(e.message || 'Failed to retrieve records. Check API Access Token.');
+      setRagError(e.message || 'Failed to retrieve records. Check Credentials in Settings.');
       setRagResults([]);
-      setShowTokenInput(true);
     } finally {
       setSearchingRag(false);
     }
@@ -95,7 +88,6 @@ const Consultation = () => {
   const handleDiagnosisSelect = (diag: string) => {
       logger.info("ConsultationUI", `Diagnosis selected: ${diag}`);
       setFinalDiagnosis(diag);
-      // Optional: Regenerate notes if needed, for now just keeping existing or user edited
   };
 
   const handleAddMedicine = () => {
@@ -147,7 +139,7 @@ const Consultation = () => {
         finalDiagnosis,
         treatmentNotes,
         medicines,
-        dietPlan, // Detailed plan with selection state
+        dietPlan,
         lifestyle: { exercise }
       };
 
@@ -174,7 +166,6 @@ const Consultation = () => {
 
   const renderVitalsStep = () => (
     <div className="grid grid-cols-1 lg:grid-cols-2 gap-8 animate-fade-in">
-      {/* Vitals Input */}
       <div className="bg-white p-6 rounded-xl border border-slate-200 shadow-sm">
         <h3 className="text-lg font-bold text-slate-900 mb-6 flex items-center gap-2">
           <div className="w-1 h-6 bg-blue-600 rounded-full"></div>
@@ -216,33 +207,13 @@ const Consultation = () => {
         </div>
 
         <div className="mt-8 pt-6 border-t border-slate-100 space-y-4">
-           {/* RAG Search Trigger */}
            <div className="bg-slate-50 p-4 rounded-lg border border-slate-200">
                <div className="flex items-center justify-between mb-3">
                   <div>
                       <h4 className="font-semibold text-slate-900 flex items-center gap-2"><Database size={16} className="text-purple-600"/> Clinical Knowledge Base</h4>
                       <p className="text-xs text-slate-500">Search Vertex AI Medical Records</p>
                   </div>
-                  <button 
-                    onClick={() => setShowTokenInput(!showTokenInput)}
-                    className="text-slate-400 hover:text-slate-600"
-                    title="Configure Access Token"
-                  >
-                    <Key size={14} />
-                  </button>
                </div>
-
-               {showTokenInput && (
-                   <div className="mb-3">
-                       <input 
-                         type="password"
-                         className="w-full text-xs p-2 border border-slate-300 rounded"
-                         placeholder="Paste Google Cloud Access Token (gcloud auth print-access-token)"
-                         value={gcpToken}
-                         onChange={(e) => setGcpToken(e.target.value)}
-                       />
-                   </div>
-               )}
 
                <button 
                  onClick={handleRagSearch}
@@ -256,7 +227,6 @@ const Consultation = () => {
                {ragError && <p className="text-xs text-red-500 mt-2">{ragError}</p>}
            </div>
            
-           {/* RAG Results Display */}
            {ragResults.length > 0 && (
               <div className="bg-blue-50/50 p-4 rounded-lg border border-blue-100 text-sm max-h-48 overflow-y-auto custom-scrollbar">
                  <p className="text-xs font-bold text-blue-800 mb-2 sticky top-0 bg-blue-50/95 py-1">Found References:</p>
@@ -282,7 +252,6 @@ const Consultation = () => {
         </div>
       </div>
 
-      {/* Static Info / Patient Details */}
       <div className="space-y-6">
         <div className="bg-white p-6 rounded-xl border border-slate-200 shadow-sm">
            <h3 className="text-lg font-bold text-slate-900 mb-4">Patient Details</h3>
@@ -299,7 +268,6 @@ const Consultation = () => {
 
   const renderDiagnosisStep = () => (
     <div className="grid grid-cols-1 lg:grid-cols-3 gap-8 animate-fade-in">
-       {/* Left: Diagnosis & Treatment */}
        <div className="lg:col-span-2 space-y-6">
           <div className="bg-white p-6 rounded-xl border border-slate-200 shadow-sm">
              <div className="flex items-center justify-between mb-4">
@@ -309,7 +277,6 @@ const Consultation = () => {
                 </span>
              </div>
              
-             {/* AI Suggestions Bubble */}
              <div className="bg-slate-50 p-4 rounded-lg border border-slate-100 mb-6">
                 <p className="text-sm font-semibold text-slate-700 mb-2">Diagnosis Suggestions:</p>
                 <div className="flex gap-2 flex-wrap">
@@ -348,7 +315,6 @@ const Consultation = () => {
              </div>
           </div>
 
-          {/* Medicines List */}
           <div className="bg-white p-6 rounded-xl border border-slate-200 shadow-sm">
              <h3 className="text-lg font-bold text-slate-900 mb-4">Prescribed Medication</h3>
              {medicines.length === 0 ? (
@@ -371,7 +337,6 @@ const Consultation = () => {
           </div>
        </div>
 
-       {/* Right: Prescription Builder */}
        <div className="bg-white p-6 rounded-xl border border-slate-200 shadow-sm h-fit">
           <h3 className="text-lg font-bold text-slate-900 mb-6">Add Medicine</h3>
           <div className="space-y-4">
@@ -509,7 +474,6 @@ const Consultation = () => {
         </div>
       </div>
 
-       {/* Final Actions */}
        <div className="flex flex-col justify-center space-y-6">
           <div className="bg-white p-6 rounded-xl border border-slate-200 shadow-sm flex items-center justify-between">
              <div>
@@ -518,17 +482,10 @@ const Consultation = () => {
              </div>
              
              <div className="flex gap-4">
-               <button 
-                  onClick={() => navigate('/')}
-                  className="px-6 py-3 bg-white border border-slate-200 text-slate-600 font-bold rounded-xl hover:bg-slate-50 transition-colors"
-               >
+               <button onClick={() => navigate('/')} className="px-6 py-3 bg-white border border-slate-200 text-slate-600 font-bold rounded-xl hover:bg-slate-50 transition-colors">
                   Cancel
                </button>
-               <button 
-                onClick={handleFinalize}
-                disabled={saving}
-                className="px-6 py-3 bg-green-600 hover:bg-green-700 text-white font-bold rounded-xl shadow-lg transition-transform hover:scale-[1.02] flex items-center justify-center gap-2"
-               >
+               <button onClick={handleFinalize} disabled={saving} className="px-6 py-3 bg-green-600 hover:bg-green-700 text-white font-bold rounded-xl shadow-lg transition-transform hover:scale-[1.02] flex items-center justify-center gap-2">
                   {saving ? <Loader2 className="animate-spin" /> : <Printer size={20} />}
                   {saving ? 'Saving...' : 'Finalize & Print'}
                </button>
@@ -550,7 +507,6 @@ const Consultation = () => {
         </div>
       </div>
 
-      {/* Progress Stepper */}
       <div className="flex items-center justify-between mb-10 max-w-3xl mx-auto">
          {[1, 2, 3].map((s) => (
             <div key={s} className="flex items-center">
@@ -562,7 +518,6 @@ const Consultation = () => {
          ))}
       </div>
 
-      {/* Content Switcher */}
       {step === 1 && renderVitalsStep()}
       {step === 2 && renderDiagnosisStep()}
       {step === 3 && renderLifestyleStep()}

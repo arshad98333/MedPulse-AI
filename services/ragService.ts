@@ -1,6 +1,7 @@
 
 import { RagResult } from '../types';
 import { logger } from './logger';
+import { authService } from './authService';
 
 // Configuration from your Vertex AI Search setup
 const PROJECT_ID = "598482017442";
@@ -11,19 +12,15 @@ const SERVING_CONFIG = "default_search";
 
 const API_ENDPOINT = `https://discoveryengine.googleapis.com/v1alpha/projects/${PROJECT_ID}/locations/${LOCATION}/collections/${COLLECTION}/engines/${ENGINE_ID}/servingConfigs/${SERVING_CONFIG}:search`;
 
-export const searchMedicalRecords = async (query: string, providedToken?: string): Promise<RagResult[]> => {
+export const searchMedicalRecords = async (query: string): Promise<RagResult[]> => {
   const serviceName = "VertexAI-RAG";
   
-  // Prioritize provided token, then fallback to localStorage
-  const token = providedToken || localStorage.getItem('gcloud_access_token') || '';
-  
-  if (!token) {
-    logger.warn(serviceName, "No Google Cloud Access Token found. Search request will likely fail (401).");
-  }
-
-  logger.info(serviceName, `Initiating search for query: "${query}"`, { endpoint: API_ENDPOINT });
-
   try {
+    // AUTOMATED AUTH: Get token from service account logic
+    const token = await authService.getAccessToken();
+
+    logger.info(serviceName, `Initiating search for query: "${query}"`, { endpoint: API_ENDPOINT });
+
     const startTime = performance.now();
     const response = await fetch(API_ENDPOINT, {
       method: 'POST',
@@ -33,7 +30,7 @@ export const searchMedicalRecords = async (query: string, providedToken?: string
       },
       body: JSON.stringify({
         query: query,
-        pageSize: 10, // Updated to 10 as per curl command
+        pageSize: 10,
         queryExpansionSpec: { condition: "AUTO" },
         spellCorrectionSpec: { mode: "AUTO" },
         languageCode: "en-US",
@@ -71,7 +68,6 @@ export const searchMedicalRecords = async (query: string, providedToken?: string
       relevanceScore: result.relevanceScore
     }));
 
-    logger.info(serviceName, "Mapped results", mappedResults);
     return mappedResults;
 
   } catch (error: any) {
